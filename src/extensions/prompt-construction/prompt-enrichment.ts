@@ -55,7 +55,13 @@ import {
 } from "../orchestration/continuation-nudge.js"
 import { ModelRegistry } from "../orchestration/model-registry/index.js"
 import { registerModelRolesCommand } from "../orchestration/model-roles-command.js"
-import { getModelRoles, modelIdFromRef, splitModelRef, validateModelRoles } from "../orchestration/model-roles.js"
+import {
+	extractCustomConfigs,
+	getModelRoles,
+	modelIdFromRef,
+	splitModelRef,
+	validateModelRoles,
+} from "../orchestration/model-roles.js"
 import { getCurrentPhase } from "../tags.js"
 import { type ContextFile, loadGlobalContextFiles, loadProjectContextFiles } from "./context-files.js"
 import { type EnvironmentInfo, type PromptMode, type ToolInfo, buildSystemPrompt } from "./system-prompt.js"
@@ -499,6 +505,7 @@ export default function (skillPaths: string[]) {
 
 			const mode: PromptMode = subagentMode ? "subagent" : multiModelEnabled ? "orchestrator" : "single"
 			const roles = mode === "orchestrator" ? getModelRoles() : undefined
+			const customConfigs = mode === "orchestrator" && roles ? extractCustomConfigs(roles) : undefined
 
 			let systemPrompt = buildSystemPrompt({
 				tools: tools as readonly ToolInfo[],
@@ -510,6 +517,7 @@ export default function (skillPaths: string[]) {
 				registry: registry,
 				mode,
 				roles,
+				customConfigs,
 				sessionId: ctx.sessionManager?.getSessionId(),
 			})
 
