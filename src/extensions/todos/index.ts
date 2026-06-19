@@ -2,7 +2,12 @@ import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-wor
 import { isAgentWorker } from "../agent-worker-context.js"
 import { registerTodosCommand } from "./command.js"
 import { TODO_CUSTOM_ENTRY_TYPE } from "./constants.js"
-import { appendTodoPromptBlockIfMissing, registerTodoPromptBlock } from "./prompt-block.js"
+import {
+	appendTodoPromptBlockIfMissing,
+	registerTodoPromptBlock,
+	registerTodoStateBlock,
+	setCurrentSessionHasUI,
+} from "./prompt-block.js"
 import { getTodoState, getTodosForScope, restoreTodoStoreFromDetails, subscribeTodoStore } from "./store.js"
 import { ADD_TODO_TOOL_NAME, TODO_TOOL_NAMES, registerTodosTool } from "./tool.js"
 import { TODO_TOOL_RESULT_SCHEMA_VERSION, type WriteTodosDetails } from "./types.js"
@@ -125,6 +130,10 @@ export default function todosExtension(pi: ExtensionAPI): void {
 
 	registerTodosCommand(pi)
 	registerTodoShortcut(pi)
+	// Headless (one-shot) runs have no widget; the todo-state prompt block
+	// renders the same content as markdown so the orchestrator agent can see
+	// it. Self-gates on currentSessionHasUI inside the block's render fn.
+	registerTodoStateBlock(pi)
 
 	const replayAndSync = (ctx: ExtensionContext) => {
 		latestCtx = ctx
@@ -136,6 +145,7 @@ export default function todosExtension(pi: ExtensionAPI): void {
 		missingTodoSteerSent = false
 		resetTodoWidgetState()
 		ensureTodoWidget(ctx)
+		setCurrentSessionHasUI(ctx.hasUI)
 		unsubscribeTodoStore?.()
 		unsubscribeTodoStore = subscribeTodoStore(() => {
 			if (!latestCtx?.hasUI) return
@@ -152,6 +162,7 @@ export default function todosExtension(pi: ExtensionAPI): void {
 		unsubscribeTodoStore?.()
 		unsubscribeTodoStore = undefined
 		latestCtx = undefined
+		setCurrentSessionHasUI(true)
 		disposeTodoWidget(ctx)
 	})
 }
