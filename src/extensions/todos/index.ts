@@ -3,8 +3,8 @@ import { isAgentWorker } from "../agent-worker-context.js"
 import { registerTodosCommand } from "./command.js"
 import { TODO_CUSTOM_ENTRY_TYPE } from "./constants.js"
 import { appendTodoPromptBlockIfMissing, registerTodoPromptBlock } from "./prompt-block.js"
-import { getTodosForScope, restoreTodoStoreFromDetails, subscribeTodoStore } from "./store.js"
-import { TODO_TOOL_NAMES, registerTodosTool } from "./tool.js"
+import { getTodoState, getTodosForScope, restoreTodoStoreFromDetails, subscribeTodoStore } from "./store.js"
+import { ADD_TODO_TOOL_NAME, TODO_TOOL_NAMES, registerTodosTool } from "./tool.js"
 import { TODO_TOOL_RESULT_SCHEMA_VERSION, type WriteTodosDetails } from "./types.js"
 import {
 	disposeTodoWidget,
@@ -44,7 +44,12 @@ const TODO_REPLAY_TOOL_NAME_SET = new Set<string>([...TODO_TOOL_NAMES, "write_to
 const TODO_STEER_EXEMPT_TOOL_NAME_SET = new Set<string>(["set_phase", "agent", "get_subagent_result", "steer_subagent"])
 
 function hasOpenTodos(): boolean {
-	return getTodosForScope().some((todo) => todo.status !== "completed")
+	// Check global scope first (fast path)
+	if (getTodosForScope().some((todo) => todo.status !== "completed")) return true
+	// Also check any ferment-scoped todos — the bridge auto-populates these,
+	// and they should suppress the steer just as global todos do.
+	const allScopes = getTodoState().byScope
+	return Object.values(allScopes).some((scopeState) => scopeState.todos.some((todo) => todo.status !== "completed"))
 }
 
 export function shouldSteerForMissingTodos(toolName: string): boolean {
@@ -93,6 +98,9 @@ export default function todosExtension(pi: ExtensionAPI): void {
 
 	pi.on("tool_call", (event) => {
 		if (!event.toolName) return { block: false }
+		// Suppress the steer when todo tools aren't in the active toolset (e.g.
+		// ferment planning mode). Sending it then just confuses the model.
+		if (!pi.getActiveTools().includes(ADD_TODO_TOOL_NAME)) return { block: false }
 		if (!shouldSteerForMissingTodos(event.toolName)) {
 			missingTodoSteerSent = false
 			return { block: false }
